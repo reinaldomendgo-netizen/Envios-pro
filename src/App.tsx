@@ -26,6 +26,7 @@ export default function App() {
   );
   const [isGlobalSending, setIsGlobalSending] = useState(false);
   const [configStatus, setConfigStatus] = useState<'checking' | 'ok' | 'error'>('checking');
+  const [selectedBrand, setSelectedBrand] = useState<'cubitt' | 'casio'>('cubitt');
   const rowsRef = useRef(rows);
 
   // Keep rowsRef in sync with rows for async access
@@ -69,6 +70,10 @@ export default function App() {
   };
 
   const generatePDF = (row: ShipmentRow): string => {
+    const isCasio = selectedBrand === 'casio';
+    const brandNameHeader = isCasio ? 'CASIO STORE' : 'CUBITT';
+    const brandSender = isCasio ? 'Casio Store Center' : 'Cubitt Logistics Center';
+
     const doc = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
@@ -89,7 +94,7 @@ export default function App() {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text('CUBITT', 10, 13);
+    doc.text(brandNameHeader, 10, 13);
     
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
@@ -104,7 +109,7 @@ export default function App() {
     doc.setFont('helvetica', 'bold');
     doc.text('FROM / REMITENTE:', 10, 35);
     doc.setFont('helvetica', 'normal');
-    doc.text('Cubitt Logistics Center', 10, 40);
+    doc.text(brandSender, 10, 40);
     doc.text('Panama City, Panama', 10, 44);
 
     // To
@@ -165,7 +170,7 @@ export default function App() {
     doc.setFontSize(6);
     doc.setTextColor(150, 150, 150);
     doc.text(`Generated on ${new Date().toLocaleDateString()}`, 10, 100);
-    doc.text('Thank you for choosing Cubitt.', width - 10, 100, { align: 'right' });
+    doc.text(`Thank you for choosing ${isCasio ? 'Casio Store' : 'Cubitt'}.`, width - 10, 100, { align: 'right' });
 
     return doc.output('datauristring');
   };
@@ -196,7 +201,8 @@ export default function App() {
           to: row.email,
           name: row.name,
           guide: row.guide,
-          pdfBase64
+          pdfBase64,
+          brand: selectedBrand
         })
       });
 
@@ -243,7 +249,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Package className="text-black/80" size={20} />
-            <span className="font-semibold tracking-tight text-black/90">Cubitt Dispatch</span>
+            <span className="font-semibold tracking-tight text-black/90">{selectedBrand === 'casio' ? 'Casio Store' : 'Cubitt'} Dispatch</span>
             
             {/* Config Status Indicator */}
             <div className={`ml-4 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border backdrop-blur-md ${
@@ -268,18 +274,37 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 relative z-10">
         
         <div className="bg-white/60 backdrop-blur-2xl rounded-[2rem] shadow-xl p-8 border border-white/40 ring-1 ring-white/50">
-          <div className="flex items-center justify-between mb-8">
-            <h1 className="text-2xl font-bold tracking-tight text-[#1D1D1F] uppercase drop-shadow-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+            <h1 className="text-2xl font-bold tracking-tight text-[#1D1D1F] uppercase drop-shadow-sm flex-grow">
               Notificaciones de Envío
             </h1>
-            <button 
-              onClick={sendAll}
-              disabled={isGlobalSending}
-              className="bg-[#0071E3]/90 hover:bg-[#0077ED] text-white text-sm font-medium px-6 py-2.5 rounded-full shadow-lg shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 backdrop-blur-sm"
-            >
-              {isGlobalSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-              Enviar Todos
-            </button>
+            
+            <div className="flex items-center gap-4">
+              {/* Brand Selector */}
+              <div className="flex items-center bg-black/5 p-1 rounded-full border border-black/5">
+                <button 
+                  onClick={() => setSelectedBrand('cubitt')}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${selectedBrand === 'cubitt' ? 'bg-white text-black shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Cubitt
+                </button>
+                <button 
+                  onClick={() => setSelectedBrand('casio')}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${selectedBrand === 'casio' ? 'bg-white text-black shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Casio Store
+                </button>
+              </div>
+
+              <button 
+                onClick={sendAll}
+                disabled={isGlobalSending}
+                className="bg-[#0071E3]/90 hover:bg-[#0077ED] text-white text-sm font-medium px-6 py-2.5 rounded-full shadow-lg shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 backdrop-blur-sm whitespace-nowrap"
+              >
+                {isGlobalSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                Enviar Todos
+              </button>
+            </div>
           </div>
 
           <div className="overflow-hidden">
@@ -407,7 +432,7 @@ export default function App() {
 
         <div className="mt-8 text-center">
           <p className="text-xs text-slate-400 font-medium tracking-wide uppercase drop-shadow-sm">
-            Sistema de Notificaciones Cubitt Dispatch
+            Sistema de Notificaciones {selectedBrand === 'casio' ? 'Casio Store' : 'Cubitt'} Dispatch
           </p>
         </div>
       </main>
