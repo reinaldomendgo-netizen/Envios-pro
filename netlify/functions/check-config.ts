@@ -1,4 +1,5 @@
 import { Handler } from "@netlify/functions";
+import nodemailer from "nodemailer";
 
 export const handler: Handler = async (event, context) => {
   const brand = event.queryStringParameters?.brand;
@@ -25,8 +26,39 @@ export const handler: Handler = async (event, context) => {
     };
   }
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ status: "ok" }),
-  };
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.SMTP_PORT || '587');
+  const secure = process.env.SMTP_PORT === '465';
+  
+  const user = isCasio ? process.env.CASIO_SMTP_USER : process.env.SMTP_USER;
+  const pass = isCasio ? process.env.CASIO_SMTP_PASS : process.env.SMTP_PASS;
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: host,
+      port: port,
+      secure: secure,
+      auth: {
+        user: user,
+        pass: pass,
+      },
+    });
+
+    // Verify the connection and credentials
+    await transporter.verify();
+    
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ status: "ok" }),
+    };
+  } catch (error) {
+    console.error("SMTP Configuration Error:", error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({
+        status: "error",
+        message: "Las credenciales (usuario/contraseña) son incorrectas o no se pudo conectar al servidor SMTP."
+      }),
+    };
+  }
 };

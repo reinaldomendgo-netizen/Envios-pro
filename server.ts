@@ -15,7 +15,7 @@ async function startServer() {
   app.use(express.json({ limit: '10mb' }));
 
   // Check configuration endpoint
-  app.get("/api/check-config", (req, res) => {
+  app.get("/api/check-config", async (req, res) => {
     const brand = req.query.brand as string;
     const isCasio = brand === 'casio';
 
@@ -36,7 +36,35 @@ async function startServer() {
         missing: missingVars
       });
     }
-    res.json({ status: "ok" });
+
+    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const port = parseInt(process.env.SMTP_PORT || '587');
+    const secure = process.env.SMTP_PORT === '465';
+    
+    const user = isCasio ? process.env.CASIO_SMTP_USER : process.env.SMTP_USER;
+    const pass = isCasio ? process.env.CASIO_SMTP_PASS : process.env.SMTP_PASS;
+
+    try {
+      const transporter = nodemailer.createTransport({
+        host: host,
+        port: port,
+        secure: secure,
+        auth: {
+          user: user,
+          pass: pass,
+        },
+      });
+
+      // Verify the connection and credentials
+      await transporter.verify();
+      res.json({ status: "ok" });
+    } catch (error) {
+      console.error("SMTP Configuration Error:", error);
+      res.status(500).json({ 
+        status: "error",
+        message: "Las credenciales (usuario/contraseña) son incorrectas o no se pudo conectar al servidor SMTP."
+      });
+    }
   });
 
   // Email sending endpoint
