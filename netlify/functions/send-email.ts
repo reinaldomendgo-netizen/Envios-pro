@@ -10,12 +10,19 @@ export const handler: Handler = async (event, context) => {
   }
 
   try {
-    const { to, name, guide, pdfBase64 } = JSON.parse(event.body || "{}");
+    const { to, name, guide, pdfBase64, brand } = JSON.parse(event.body || "{}");
+    const isCasio = brand === 'casio';
 
     const missingVars = [];
     if (!process.env.SMTP_HOST) missingVars.push("SMTP_HOST");
-    if (!process.env.SMTP_USER) missingVars.push("SMTP_USER");
-    if (!process.env.SMTP_PASS) missingVars.push("SMTP_PASS");
+    
+    if (isCasio) {
+      if (!process.env.CASIO_SMTP_USER) missingVars.push("CASIO_SMTP_USER");
+      if (!process.env.CASIO_SMTP_PASS) missingVars.push("CASIO_SMTP_PASS");
+    } else {
+      if (!process.env.SMTP_USER) missingVars.push("SMTP_USER");
+      if (!process.env.SMTP_PASS) missingVars.push("SMTP_PASS");
+    }
 
     if (missingVars.length > 0) {
       return {
@@ -26,37 +33,50 @@ export const handler: Handler = async (event, context) => {
       };
     }
 
+    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const port = parseInt(process.env.SMTP_PORT || '587');
+    const secure = process.env.SMTP_PORT === '465';
+    
+    const user = isCasio ? process.env.CASIO_SMTP_USER : process.env.SMTP_USER;
+    const pass = isCasio ? process.env.CASIO_SMTP_PASS : process.env.SMTP_PASS;
+
+    const brandName = isCasio ? 'Casio Store' : 'Cubitt';
+    const defaultCubittFrom = process.env.SMTP_FROM || `"Cubitt Shipping" <${user}>`;
+    const defaultCasioFrom = process.env.CASIO_SMTP_FROM || `"Casio Store" <${user}>`;
+    
+    const brandFrom = isCasio ? defaultCasioFrom : defaultCubittFrom;
+
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_PORT === '465',
+      host: host,
+      port: port,
+      secure: secure,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: user,
+        pass: pass,
       },
     });
 
     const mailOptions = {
-      from: process.env.SMTP_FROM || '"Cubitt Shipping" <no-reply@cubitt.com>',
+      from: brandFrom,
       to: to,
-      subject: `Tu envío ya está en camino 🚚 | Cubitt`,
-      text: `Estimado/a ${name},\n\nNos complace informarle que su pedido ha sido despachado exitosamente.\n\nNúmero de guía: ${guide}\n\nAgradecemos sinceramente su confianza en Cubitt.\nTrabajamos cada día para ofrecerle la mejor experiencia posible.\n\nQuedamos atentos a cualquier consulta.\n\nCordialmente,\nEquipo Cubitt`,
+      subject: `Tu envío ya está en camino 🚚 | ${brandName}`,
+      text: `Estimado/a ${name},\n\nNos complace informarle que su pedido ha sido despachado exitosamente.\n\nNúmero de guía: ${guide}\n\nAgradecemos sinceramente su confianza en ${brandName}.\nTrabajamos cada día para ofrecerle la mejor experiencia posible.\n\nQuedamos atentos a cualquier consulta.\n\nCordialmente,\nEquipo ${brandName}`,
       html: `
         <div style="font-family: sans-serif; color: #333;">
           <p>Estimado/a ${name},</p>
           <p>Nos complace informarle que su pedido ha sido despachado exitosamente.</p>
           <p><strong>Número de guía:</strong> ${guide}</p>
-          <p>Agradecemos sinceramente su confianza en Cubitt.<br>
+          <p>Agradecemos sinceramente su confianza en ${brandName}.<br>
           Trabajamos cada día para ofrecerle la mejor experiencia posible.</p>
           <p>Quedamos atentos a cualquier consulta.</p>
           <br>
           <p>Cordialmente,<br>
-          Equipo Cubitt</p>
+          Equipo ${brandName}</p>
         </div>
       `,
       attachments: [
         {
-          filename: `Guia_Cubitt_${guide}.pdf`,
+          filename: `Guia_${isCasio ? 'Casio' : 'Cubitt'}_${guide}.pdf`,
           content: pdfBase64.split('base64,')[1],
           encoding: 'base64',
         },
