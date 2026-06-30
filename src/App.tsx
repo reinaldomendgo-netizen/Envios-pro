@@ -237,12 +237,12 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F5F5F7] font-sans text-[#1D1D1F] relative overflow-hidden">
       {/* Vibrant Mesh Gradient Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-rose-100 via-sky-100 to-violet-200 opacity-80" />
+      <div className={`absolute inset-0 bg-gradient-to-br opacity-80 transition-colors duration-700 ${selectedBrand === 'casio' ? 'from-neutral-300 via-stone-200 to-zinc-400' : 'from-rose-100 via-sky-100 to-violet-200'}`} />
       
       {/* Ambient Background Blobs */}
-      <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-blue-400/20 rounded-full blur-[120px] pointer-events-none mix-blend-multiply animate-pulse" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-purple-400/20 rounded-full blur-[120px] pointer-events-none mix-blend-multiply animate-pulse" />
-      <div className="absolute top-[40%] left-[40%] w-[40%] h-[40%] bg-pink-300/20 rounded-full blur-[100px] pointer-events-none mix-blend-multiply" />
+      <div className={`absolute top-[-20%] left-[-10%] w-[60%] h-[60%] rounded-full blur-[120px] pointer-events-none mix-blend-multiply animate-pulse transition-colors duration-700 ${selectedBrand === 'casio' ? 'bg-black/10' : 'bg-blue-400/20'}`} />
+      <div className={`absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] rounded-full blur-[120px] pointer-events-none mix-blend-multiply animate-pulse transition-colors duration-700 ${selectedBrand === 'casio' ? 'bg-stone-500/10' : 'bg-purple-400/20'}`} />
+      <div className={`absolute top-[40%] left-[40%] w-[40%] h-[40%] rounded-full blur-[100px] pointer-events-none mix-blend-multiply transition-colors duration-700 ${selectedBrand === 'casio' ? 'bg-neutral-400/10' : 'bg-pink-300/20'}`} />
       
       {/* Apple-style Header */}
       <header className="bg-white/70 backdrop-blur-xl sticky top-0 z-50 border-b border-white/20 shadow-sm supports-[backdrop-filter]:bg-white/60">
@@ -290,7 +290,7 @@ export default function App() {
                 </button>
                 <button 
                   onClick={() => setSelectedBrand('casio')}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${selectedBrand === 'casio' ? 'bg-white text-black shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${selectedBrand === 'casio' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   Casio Store
                 </button>
@@ -299,7 +299,7 @@ export default function App() {
               <button 
                 onClick={sendAll}
                 disabled={isGlobalSending}
-                className="bg-[#0071E3]/90 hover:bg-[#0077ED] text-white text-sm font-medium px-6 py-2.5 rounded-full shadow-lg shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 backdrop-blur-sm whitespace-nowrap"
+                className={`${selectedBrand === 'casio' ? 'bg-black hover:bg-neutral-800 shadow-neutral-500/20' : 'bg-[#0071E3]/90 hover:bg-[#0077ED] shadow-blue-500/20'} text-white text-sm font-medium px-6 py-2.5 rounded-full shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 backdrop-blur-sm whitespace-nowrap`}
               >
                 {isGlobalSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                 Enviar Todos
@@ -387,7 +387,7 @@ export default function App() {
                         <button
                           onClick={() => sendEmail(row)}
                           disabled={!row.email || !row.name || !row.guide}
-                          className="p-2.5 text-slate-500 hover:text-[#0071E3] hover:bg-blue-50/50 rounded-full transition-colors disabled:opacity-30 backdrop-blur-sm"
+                          className={`p-2.5 text-slate-500 rounded-full transition-colors disabled:opacity-30 backdrop-blur-sm ${selectedBrand === 'casio' ? 'hover:text-black hover:bg-black/5' : 'hover:text-[#0071E3] hover:bg-blue-50/50'}`}
                           title="Enviar Correo"
                         >
                           <Send size={18} strokeWidth={1.5} />
@@ -396,7 +396,7 @@ export default function App() {
                     )}
                     
                     {row.status === 'sending' && (
-                      <Loader2 size={20} className="text-[#0071E3] animate-spin" />
+                      <Loader2 size={20} className={`${selectedBrand === 'casio' ? 'text-black' : 'text-[#0071E3]'} animate-spin`} />
                     )}
                     
                     {row.status === 'success' && (
@@ -416,7 +416,7 @@ export default function App() {
                         </div>
                         <button
                           onClick={() => resetRow(row.id)}
-                          className="p-2 text-slate-400 hover:text-[#0071E3] hover:bg-white/60 rounded-full transition-colors"
+                          className={`p-2 text-slate-400 rounded-full transition-colors ${selectedBrand === 'casio' ? 'hover:text-black hover:bg-black/5' : 'hover:text-[#0071E3] hover:bg-white/60'}`}
                           title="Reintentar / Editar"
                         >
                           <RefreshCw size={16} />

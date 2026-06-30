@@ -36,18 +36,13 @@ async function startServer() {
     const isCasio = brand === 'casio';
 
     const missingVars = [];
-    if (isCasio) {
-      if (!process.env.CASIO_SMTP_USER) missingVars.push("CASIO_SMTP_USER");
-      if (!process.env.CASIO_SMTP_PASS) missingVars.push("CASIO_SMTP_PASS");
-    } else {
-      if (!process.env.SMTP_HOST) missingVars.push("SMTP_HOST");
-      if (!process.env.SMTP_USER) missingVars.push("SMTP_USER");
-      if (!process.env.SMTP_PASS) missingVars.push("SMTP_PASS");
-    }
+    if (!process.env.SMTP_HOST) missingVars.push("SMTP_HOST");
+    if (!process.env.SMTP_USER) missingVars.push("SMTP_USER");
+    if (!process.env.SMTP_PASS) missingVars.push("SMTP_PASS");
 
     if (missingVars.length > 0) {
       return res.status(500).json({ 
-        error: `Error de configuración para ${isCasio ? 'Casio' : 'Cubitt'}: Faltan las variables ${missingVars.join(", ")}. Configúralas en el panel de variables de entorno.` 
+        error: `Error de configuración: Faltan las variables ${missingVars.join(", ")}. Configúralas en el panel de variables de entorno.` 
       });
     }
 
@@ -55,13 +50,15 @@ async function startServer() {
     const port = parseInt(process.env.SMTP_PORT || '587');
     const secure = process.env.SMTP_PORT === '465';
     
-    const user = isCasio ? process.env.CASIO_SMTP_USER : process.env.SMTP_USER;
-    const pass = isCasio ? process.env.CASIO_SMTP_PASS : process.env.SMTP_PASS;
+    // Fallback to standard SMTP user if Casio is not specifically set
+    const user = (isCasio && process.env.CASIO_SMTP_USER) ? process.env.CASIO_SMTP_USER : process.env.SMTP_USER;
+    const pass = (isCasio && process.env.CASIO_SMTP_PASS) ? process.env.CASIO_SMTP_PASS : process.env.SMTP_PASS;
 
     const brandName = isCasio ? 'Casio Store' : 'Cubitt';
-    const brandFrom = isCasio 
-      ? (process.env.CASIO_SMTP_FROM || `"Casio Store" <${user}>`)
-      : (process.env.SMTP_FROM || `"Cubitt Shipping" <${user}>`);
+    const defaultCubittFrom = process.env.SMTP_FROM || `"Cubitt Shipping" <${user}>`;
+    const defaultCasioFrom = process.env.CASIO_SMTP_FROM || `"Casio Store" <${user}>`;
+    
+    const brandFrom = isCasio ? defaultCasioFrom : defaultCubittFrom;
 
     try {
       const transporter = nodemailer.createTransport({
