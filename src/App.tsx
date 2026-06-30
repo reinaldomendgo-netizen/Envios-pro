@@ -36,11 +36,11 @@ export default function App() {
 
   useEffect(() => {
     checkConfig();
-  }, []);
+  }, [selectedBrand]);
 
   const checkConfig = async () => {
     try {
-      const res = await fetch('/api/check-config');
+      const res = await fetch(`/api/check-config?brand=${selectedBrand}`);
       if (res.ok) {
         setConfigStatus('ok');
       } else {
