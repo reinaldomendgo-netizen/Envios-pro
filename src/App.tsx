@@ -26,7 +26,7 @@ export default function App() {
   );
   const [isGlobalSending, setIsGlobalSending] = useState(false);
   const [configStatus, setConfigStatus] = useState<'checking' | 'ok' | 'error'>('checking');
-  const [selectedBrand, setSelectedBrand] = useState<'cubitt' | 'casio'>('cubitt');
+  const [selectedBrand, setSelectedBrand] = useState<'cubitt' | 'casio' | null>(null);
   const rowsRef = useRef(rows);
 
   // Keep rowsRef in sync with rows for async access
@@ -35,10 +35,14 @@ export default function App() {
   }, [rows]);
 
   useEffect(() => {
-    checkConfig();
+    if (selectedBrand) {
+      checkConfig();
+    }
   }, [selectedBrand]);
 
   const checkConfig = async () => {
+    if (!selectedBrand) return;
+    setConfigStatus('checking');
     try {
       const res = await fetch(`/api/check-config?brand=${selectedBrand}`);
       if (res.ok) {
@@ -234,6 +238,53 @@ export default function App() {
     setIsGlobalSending(false);
   };
 
+  if (!selectedBrand) {
+    return (
+      <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center font-sans relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-white to-slate-100 opacity-70" />
+        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] rounded-full blur-[120px] pointer-events-none mix-blend-multiply animate-pulse bg-blue-400/10" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] rounded-full blur-[120px] pointer-events-none mix-blend-multiply animate-pulse bg-purple-400/10" />
+        
+        <div className="relative z-10 max-w-4xl w-full px-6">
+          <div className="text-center mb-16">
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 mb-6 drop-shadow-sm">¿Desde dónde deseas enviar notificaciones hoy?</h1>
+            <p className="text-lg text-slate-500 font-medium">Selecciona el espacio de trabajo para continuar</p>
+          </div>
+          
+          <div className="grid sm:grid-cols-2 gap-8 max-w-3xl mx-auto">
+            <button
+              onClick={() => setSelectedBrand('cubitt')}
+              className="group relative bg-white/70 backdrop-blur-xl p-12 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white/60 hover:border-blue-200 hover:shadow-blue-500/20 transition-all text-center flex flex-col items-center justify-center gap-6 overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="w-24 h-24 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner relative z-10">
+                <Package size={48} strokeWidth={1.5} />
+              </div>
+              <div className="relative z-10">
+                <h2 className="text-3xl font-bold text-slate-900 mb-3 tracking-tight">Cubitt</h2>
+                <p className="text-slate-500 font-medium">Entorno principal de despachos</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setSelectedBrand('casio')}
+              className="group relative bg-white/70 backdrop-blur-xl p-12 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white/60 hover:border-black/20 hover:shadow-black/10 transition-all text-center flex flex-col items-center justify-center gap-6 overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-100/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="w-24 h-24 rounded-full bg-slate-100 text-slate-900 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner relative z-10">
+                <Package size={48} strokeWidth={1.5} />
+              </div>
+              <div className="relative z-10">
+                <h2 className="text-3xl font-bold text-slate-900 mb-3 tracking-tight">Casio Store</h2>
+                <p className="text-slate-500 font-medium">Entorno secundario de despachos</p>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F5F7] font-sans text-[#1D1D1F] relative overflow-hidden">
       {/* Vibrant Mesh Gradient Background */}
@@ -280,21 +331,12 @@ export default function App() {
             </h1>
             
             <div className="flex items-center gap-4">
-              {/* Brand Selector */}
-              <div className="flex items-center bg-black/5 p-1 rounded-full border border-black/5">
-                <button 
-                  onClick={() => setSelectedBrand('cubitt')}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${selectedBrand === 'cubitt' ? 'bg-white text-black shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  Cubitt
-                </button>
-                <button 
-                  onClick={() => setSelectedBrand('casio')}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${selectedBrand === 'casio' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  Casio Store
-                </button>
-              </div>
+              <button
+                onClick={() => setSelectedBrand(null)}
+                className="px-4 py-2.5 rounded-full text-sm font-medium transition-all text-slate-500 hover:text-slate-900 bg-black/5 hover:bg-black/10 border border-transparent whitespace-nowrap"
+              >
+                Cambiar Entorno
+              </button>
 
               <button 
                 onClick={sendAll}
