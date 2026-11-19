@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, FileText, Loader2, CheckCircle, AlertCircle, Package, RefreshCw } from 'lucide-react';
+import { Send, FileText, Loader2, CheckCircle, AlertCircle, Package, RefreshCw, X, Download, Truck } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { motion } from 'motion/react';
 
@@ -26,7 +26,9 @@ export default function App() {
   );
   const [isGlobalSending, setIsGlobalSending] = useState(false);
   const [configStatus, setConfigStatus] = useState<'checking' | 'ok' | 'error'>('checking');
+  const [configError, setConfigError] = useState<string | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<'cubitt' | 'casio' | null>(null);
+  const [previewModal, setPreviewModal] = useState<{ url: string; filename: string; row: ShipmentRow } | null>(null);
   const rowsRef = useRef(rows);
 
   // Keep rowsRef in sync with rows for async access
@@ -43,15 +45,31 @@ export default function App() {
   const checkConfig = async () => {
     if (!selectedBrand) return;
     setConfigStatus('checking');
+    setConfigError(null);
     try {
       const res = await fetch(`/api/check-config?brand=${selectedBrand}`);
-      if (res.ok) {
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = null;
+      }
+
+      if (res.ok && data?.status === 'ok') {
         setConfigStatus('ok');
       } else {
         setConfigStatus('error');
+        const msg =
+          data?.message ||
+          (Array.isArray(data?.missing) && data.missing.length > 0
+            ? `Faltan variables de entorno: ${data.missing.join(', ')}`
+            : 'El servicio de correo no está disponible o no está configurado.');
+        setConfigError(msg);
       }
     } catch (e) {
       setConfigStatus('error');
+      setConfigError('No se pudo conectar con el servidor de correo.');
     }
   };
 
@@ -73,10 +91,16 @@ export default function App() {
     }));
   };
 
-  const generatePDF = (row: ShipmentRow): string => {
+  const buildPDFDocument = (row: ShipmentRow): jsPDF => {
     const isCasio = selectedBrand === 'casio';
+    const isServientrega = row.shippingMethod === 'servientrega';
     const brandNameHeader = isCasio ? 'CASIO STORE' : 'CUBITT';
-    const brandSender = isCasio ? 'Casio Store Center' : 'Cubitt Logistics Center';
+    const brandSender = isCasio ? 'Casio Store Panamá' : 'Cubitt Panamá';
+    const carrierLabel = isServientrega ? 'Servientrega' : 'Uno Express';
+    const trackingUrl = isServientrega
+      ? 'https://servientrega.com.pa/'
+      : 'https://unoexpresspanama.com/';
+    const trackingDomain = isServientrega ? 'servientrega.com.pa' : 'unoexpresspanama.com';
 
     const doc = new jsPDF({
       orientation: 'landscape',
@@ -87,107 +111,255 @@ export default function App() {
     const width = 148;
     const height = 105;
 
-    // Background
-    doc.setFillColor(255, 255, 255);
+    // 1. Tinted Soft Canvas Background (mirrors Generador de Notificaciones)
+    if (isCasio) {
+      doc.setFillColor(232, 232, 235);
+    } else {
+      doc.setFillColor(236, 243, 253);
+    }
     doc.rect(0, 0, width, height, 'F');
 
-    // Header / Logo area
-    doc.setFillColor(0, 0, 0);
-    doc.rect(0, 0, width, 20, 'F');
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text(brandNameHeader, 10, 13);
-    
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text('SHIPPING SERVICE', width - 10, 13, { align: 'right' });
+    // Subtle decorative corner accent circles (muted so text remains ultra legible)
+    if (isCasio) {
+      doc.setFillColor(218, 218, 222);
+    } else {
+      doc.setFillColor(221, 233, 252);
+    }
+    doc.circle(12, 10, 22, 'F');
+    doc.circle(138, 96, 24, 'F');
 
-    // Main Content
-    doc.setTextColor(0, 0, 0);
-    
-    // Left Column: Details
-    // From
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'bold');
-    doc.text('FROM / REMITENTE:', 10, 35);
-    doc.setFont('helvetica', 'normal');
-    doc.text(brandSender, 10, 40);
-    doc.text('Panama City, Panama', 10, 44);
+    // 2. Top Frosted Header Bar (mirrors app <header>)
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(isCasio ? 210 : 212, isCasio ? 210 : 224, isCasio ? 214 : 242);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(5, 4.5, 138, 12.5, 3.5, 3.5, 'FD');
 
-    // To
-    doc.setFontSize(7);
+    // Brand Name in Header
+    doc.setTextColor(29, 29, 31);
     doc.setFont('helvetica', 'bold');
-    doc.text('TO / DESTINATARIO:', 10, 55);
-    doc.setFontSize(11);
-    doc.text(row.name || 'Valued Customer', 10, 61);
-    doc.setFontSize(7);
-    doc.text(row.email, 10, 66);
+    doc.setFontSize(10.5);
+    doc.text(brandNameHeader, 10, 12.1);
+
+    const brandWidth = doc.getTextWidth(brandNameHeader);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('  |  Despachos', 10 + brandWidth, 12.1);
+
+    // Header Status Pill ("ENVIADO" - mirrors "Sistema Listo" green pill)
+    doc.setFillColor(236, 253, 245);
+    doc.setDrawColor(167, 243, 208);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(114, 7.5, 24.5, 6.5, 3.25, 3.25, 'FD');
+    doc.setFillColor(16, 185, 129);
+    doc.circle(118, 10.75, 1.1, 'F');
+    doc.setTextColor(4, 120, 87);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.text('ENVIADO', 120.5, 11.7);
+
+    // 3. Main Glassmorphic-style White Card (mirrors rounded-[2rem] card)
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(isCasio ? 212 : 214, isCasio ? 212 : 225, isCasio ? 216 : 242);
+    doc.setLineWidth(0.35);
+    doc.roundedRect(5, 19.5, 138, 80.5, 4, 4, 'FD');
+
+    // Card Title Row
+    doc.setTextColor(29, 29, 31);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.text('NOTIFICACIÓN DE ENVÍO', 11, 27.5);
+
+    // Carrier Indicator Pill in Top-Right of Card
+    const carrierPillText = `ENVÍO: ${carrierLabel.toUpperCase()}`;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    const carrierPillTextWidth = doc.getTextWidth(carrierPillText);
+    const pillWidth = carrierPillTextWidth + 9;
+    const pillX = 137 - pillWidth;
+
+    if (isServientrega) {
+      doc.setFillColor(236, 253, 245);
+      doc.setDrawColor(110, 231, 183);
+      doc.roundedRect(pillX, 22.8, pillWidth, 6.5, 3.25, 3.25, 'FD');
+      doc.setFillColor(5, 150, 105);
+      doc.circle(pillX + 3.5, 26.05, 1, 'F');
+      doc.setTextColor(6, 95, 70);
+    } else if (isCasio) {
+      doc.setFillColor(244, 244, 245);
+      doc.setDrawColor(212, 212, 216);
+      doc.roundedRect(pillX, 22.8, pillWidth, 6.5, 3.25, 3.25, 'FD');
+      doc.setFillColor(24, 24, 27);
+      doc.circle(pillX + 3.5, 26.05, 1, 'F');
+      doc.setTextColor(24, 24, 27);
+    } else {
+      doc.setFillColor(239, 246, 255);
+      doc.setDrawColor(191, 219, 254);
+      doc.roundedRect(pillX, 22.8, pillWidth, 6.5, 3.25, 3.25, 'FD');
+      doc.setFillColor(0, 113, 227);
+      doc.circle(pillX + 3.5, 26.05, 1, 'F');
+      doc.setTextColor(0, 91, 187);
+    }
+    doc.text(carrierPillText, pillX + 6, 27);
+
+    // Subtle Header Divider inside Card
+    doc.setDrawColor(241, 245, 249);
+    doc.setLineWidth(0.35);
+    doc.line(11, 31.5, 137, 31.5);
+
+    // 4. Left Column: Remitente, Destinatario & Empresa de Envío
+    // Remitente
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('REMITENTE', 11, 38);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(29, 29, 31);
+    doc.text(brandSender, 11, 42.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Ciudad de Panamá, Panamá', 11, 46.5);
+
+    // Destinatario
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('DESTINATARIO', 11, 54);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(29, 29, 31);
+    const customerName = row.name?.trim() || 'Cliente';
+    const nameLines = doc.splitTextToSize(customerName, 55).slice(0, 2);
+    doc.text(nameLines, 11, 58.8);
+
+    const emailY = nameLines.length > 1 ? 66.5 : 63.2;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(100, 116, 139);
+    const emailLines = doc.splitTextToSize(row.email || '', 55).slice(0, 1);
+    if (emailLines[0]) {
+      doc.text(emailLines[0], 11, emailY);
+    }
+
+    // Empresa de envío (Explicit Spanish indicator)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('EMPRESA DE ENVÍO', 11, 74.5);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(29, 29, 31);
+    doc.text(carrierLabel, 11, 79.5);
 
     // Vertical Divider
-    doc.setDrawColor(200, 200, 200);
-    doc.line(70, 30, 70, 90);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.line(70, 35.5, 70, 88);
 
-    // Right Column: Tracking
-    const rightColX = 75;
-    
-    doc.setFontSize(8);
-    doc.setTextColor(100, 100, 100);
-    doc.text('TRACKING NUMBER / NÚMERO DE GUÍA', rightColX, 35);
-    
-    doc.setFontSize(18);
-    doc.setTextColor(0, 0, 0);
+    // 5. Right Column: Guía + CTA Rastrear Pedido
+    const rightX = 74.5;
+    const rightW = 62.5;
+    const rightCenter = rightX + rightW / 2;
+
+    // Guide Highlight Box
+    doc.setFillColor(isCasio ? 244 : 248, isCasio ? 244 : 250, isCasio ? 245 : 252);
+    doc.setDrawColor(isCasio ? 228 : 226, isCasio ? 228 : 232, isCasio ? 231 : 240);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(rightX, 35.5, rightW, 21, 3, 3, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('NÚMERO DE GUÍA', rightCenter, 41, { align: 'center' });
+
+    const guideText = (row.guide?.trim() || 'PENDIENTE').toUpperCase();
+    const guideFontSize = guideText.length > 15 ? 10 : guideText.length > 11 ? 12.5 : 15;
     doc.setFont('courier', 'bold');
-    doc.text(row.guide || 'PENDING', rightColX, 45);
+    doc.setFontSize(guideFontSize);
+    doc.setTextColor(29, 29, 31);
+    doc.text(guideText, rightCenter, 50.5, { align: 'center' });
 
-    // Call to action
-    doc.setFontSize(8);
+    // Helper Text
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(0, 0, 0);
-    doc.text('Copia tu número de guía y consúltalo acá:', rightColX, 60);
-
-    // Button/Link
-    const trackingUrl = row.shippingMethod === 'servientrega' 
-      ? 'https://servientrega.com.pa/' 
-      : 'https://unoexpresspanama.com/';
-
-    doc.setFillColor(0, 0, 0);
-    doc.roundedRect(rightColX, 65, 60, 10, 1, 1, 'F');
-    doc.setTextColor(255, 255, 255);
     doc.setFontSize(7);
+    doc.setTextColor(71, 85, 105);
+    doc.text('Copia tu guía y consulta tu envío aquí:', rightCenter, 63, { align: 'center' });
+
+    // Pill CTA Button ("RASTREAR PEDIDO" matching app primary button)
+    const btnX = rightX + 3.5;
+    const btnW = rightW - 7;
+    const btnY = 66.5;
+    const btnH = 10.5;
+
+    if (isCasio) {
+      doc.setFillColor(17, 17, 17);
+    } else {
+      doc.setFillColor(0, 113, 227);
+    }
+    doc.roundedRect(btnX, btnY, btnW, btnH, 5.25, 5.25, 'F');
+    doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.text('RASTREAR ENVÍO', rightColX + 30, 71.5, { align: 'center' });
-    doc.link(rightColX, 65, 60, 10, { url: trackingUrl });
+    doc.setFontSize(7.8);
+    doc.text('RASTREAR PEDIDO', rightCenter, btnY + 6.7, { align: 'center' });
+    doc.link(btnX, btnY, btnW, btnH, { url: trackingUrl });
 
-    // Stamp
-    doc.setDrawColor(40, 205, 65); // Apple Green
-    doc.setTextColor(40, 205, 65);
-    doc.setLineWidth(0.5);
-    doc.roundedRect(width - 35, 85, 25, 8, 2, 2, 'D');
-    
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.text('ENVIADO', width - 22.5, 90, { align: 'center' });
+    // Readable URL hint below button
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(trackingDomain, rightCenter, 82, { align: 'center' });
 
-    // Footer
-    doc.setFontSize(6);
-    doc.setTextColor(150, 150, 150);
-    doc.text(`Generated on ${new Date().toLocaleDateString()}`, 10, 100);
-    doc.text(`Thank you for choosing ${isCasio ? 'Casio Store' : 'Cubitt'}.`, width - 10, 100, { align: 'right' });
+    // 6. Card Footer
+    doc.setDrawColor(241, 245, 249);
+    doc.setLineWidth(0.3);
+    doc.line(11, 90.5, 137, 90.5);
 
-    return doc.output('datauristring');
+    const formattedDate = new Date().toLocaleDateString('es-PA', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.2);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Generado el ${formattedDate}`, 11, 95.5);
+    doc.text(`Gracias por elegir ${isCasio ? 'Casio Store' : 'Cubitt'}.`, 137, 95.5, { align: 'right' });
+
+    return doc;
+  };
+
+  const generatePDF = (row: ShipmentRow): string => {
+    return buildPDFDocument(row).output('datauristring');
+  };
+
+  const closePreviewModal = () => {
+    if (previewModal?.url) {
+      URL.revokeObjectURL(previewModal.url);
+    }
+    setPreviewModal(null);
   };
 
   const previewPDF = (row: ShipmentRow) => {
     if (!row.name && !row.guide) return;
-    const pdfDataUri = generatePDF(row);
-    const win = window.open();
-    if (win) {
-      win.document.write(
-        `<iframe src="${pdfDataUri}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`
-      );
+    if (previewModal?.url) {
+      URL.revokeObjectURL(previewModal.url);
     }
+    const doc = buildPDFDocument(row);
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    const brandTag = selectedBrand === 'casio' ? 'Casio' : 'Cubitt';
+    const guideTag = row.guide?.trim() || 'VistaPrevia';
+    setPreviewModal({
+      url,
+      filename: `Guia_${brandTag}_${guideTag}.pdf`,
+      row,
+    });
   };
 
   const sendEmail = async (row: ShipmentRow) => {
@@ -206,7 +378,8 @@ export default function App() {
           name: row.name,
           guide: row.guide,
           pdfBase64,
-          brand: selectedBrand
+          brand: selectedBrand,
+          shippingMethod: row.shippingMethod,
         })
       });
 
@@ -215,7 +388,7 @@ export default function App() {
       try {
         data = JSON.parse(text);
       } catch (e) {
-        throw new Error('Respuesta inválida del servidor');
+        throw new Error('El servidor no devolvió una respuesta válida (verifica /api/send-email)');
       }
 
       if (!response.ok) {
@@ -303,13 +476,16 @@ export default function App() {
             <span className="font-semibold tracking-tight text-black/90">{selectedBrand === 'casio' ? 'Casio Store' : 'Cubitt'} Dispatch</span>
             
             {/* Config Status Indicator */}
-            <div className={`ml-4 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border backdrop-blur-md ${
-              configStatus === 'ok' 
-                ? 'bg-green-50/50 text-green-700 border-green-200/50' 
-                : configStatus === 'error' 
-                  ? 'bg-red-50/50 text-red-700 border-red-200/50'
-                  : 'bg-slate-50/50 text-slate-600 border-slate-200/50'
-            }`}>
+            <div
+              title={configError || undefined}
+              className={`ml-4 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border backdrop-blur-md ${
+                configStatus === 'ok' 
+                  ? 'bg-green-50/50 text-green-700 border-green-200/50' 
+                  : configStatus === 'error' 
+                    ? 'bg-red-50/50 text-red-700 border-red-200/50'
+                    : 'bg-slate-50/50 text-slate-600 border-slate-200/50'
+              }`}
+            >
               <div className={`w-2 h-2 rounded-full ${
                 configStatus === 'ok' ? 'bg-green-500' : configStatus === 'error' ? 'bg-red-500' : 'bg-slate-400'
               }`} />
@@ -317,7 +493,11 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {/* Header actions if needed */}
+            {configStatus === 'error' && configError && (
+              <span className="hidden md:inline-block text-xs text-red-600 bg-red-50/80 border border-red-200/60 px-3 py-1 rounded-full">
+                {configError}
+              </span>
+            )}
           </div>
         </div>
       </header>
@@ -404,14 +584,25 @@ export default function App() {
 
                   {/* Shipping Method Select */}
                   <div className="col-span-2">
-                    <select
-                      value={row.shippingMethod}
-                      onChange={(e) => handleInputChange(row.id, 'shippingMethod', e.target.value as 'unoexpress' | 'servientrega')}
-                      className="w-full bg-transparent border-b border-transparent focus:border-slate-400/50 p-2 text-[14px] text-slate-600 focus:ring-0 transition-all outline-none cursor-pointer"
-                    >
-                      <option value="unoexpress">Uno Express</option>
-                      <option value="servientrega">Servientrega</option>
-                    </select>
+                    <div className="flex items-center gap-2 bg-white/50 border border-black/5 rounded-full px-3 py-1.5">
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 ${
+                          row.shippingMethod === 'servientrega'
+                            ? 'bg-emerald-500'
+                            : selectedBrand === 'casio'
+                              ? 'bg-neutral-900'
+                              : 'bg-[#0071E3]'
+                        }`}
+                      />
+                      <select
+                        value={row.shippingMethod}
+                        onChange={(e) => handleInputChange(row.id, 'shippingMethod', e.target.value as 'unoexpress' | 'servientrega')}
+                        className="w-full bg-transparent text-[13px] font-medium text-slate-700 focus:ring-0 outline-none cursor-pointer"
+                      >
+                        <option value="unoexpress">Uno Express</option>
+                        <option value="servientrega">Servientrega</option>
+                      </select>
+                    </div>
                   </div>
 
                   {/* Actions */}
@@ -449,20 +640,27 @@ export default function App() {
                     )}
 
                     {row.status === 'error' && (
-                      <div className="flex items-center gap-2">
-                        <div className="group/error relative">
-                          <AlertCircle size={20} className="text-red-400 cursor-help" />
-                          <div className="absolute right-0 top-full mt-2 w-64 p-3 bg-white/90 backdrop-blur-xl text-red-600 text-xs rounded-xl shadow-xl border border-red-100 opacity-0 group-hover/error:opacity-100 pointer-events-none z-10">
-                            {row.errorMessage || 'Error al enviar'}
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="flex items-center gap-2">
+                          <div className="group/error relative">
+                            <AlertCircle size={20} className="text-red-500 cursor-help" />
+                            <div className="absolute right-0 top-full mt-2 w-64 p-3 bg-white/95 backdrop-blur-xl text-red-600 text-xs rounded-xl shadow-xl border border-red-100 opacity-0 group-hover/error:opacity-100 pointer-events-none z-20">
+                              {row.errorMessage || 'Error al enviar'}
+                            </div>
                           </div>
+                          <button
+                            onClick={() => resetRow(row.id)}
+                            className={`p-2 text-slate-400 rounded-full transition-colors ${selectedBrand === 'casio' ? 'hover:text-black hover:bg-black/5' : 'hover:text-[#0071E3] hover:bg-white/60'}`}
+                            title="Reintentar / Editar"
+                          >
+                            <RefreshCw size={16} />
+                          </button>
                         </div>
-                        <button
-                          onClick={() => resetRow(row.id)}
-                          className={`p-2 text-slate-400 rounded-full transition-colors ${selectedBrand === 'casio' ? 'hover:text-black hover:bg-black/5' : 'hover:text-[#0071E3] hover:bg-white/60'}`}
-                          title="Reintentar / Editar"
-                        >
-                          <RefreshCw size={16} />
-                        </button>
+                        {row.errorMessage && (
+                          <span className="text-[11px] text-red-600 text-center max-w-[160px] leading-tight line-clamp-2" title={row.errorMessage}>
+                            {row.errorMessage}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -478,6 +676,59 @@ export default function App() {
           </p>
         </div>
       </main>
+
+      {/* In-App PDF Preview Modal */}
+      {previewModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={closePreviewModal}
+        >
+          <div
+            className="bg-white/95 backdrop-blur-2xl rounded-[2rem] shadow-2xl border border-white/60 w-full max-w-3xl overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-black/5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${selectedBrand === 'casio' ? 'bg-neutral-900 text-white' : 'bg-[#0071E3] text-white'}`}>
+                  <Truck size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-slate-900 truncate">
+                    Vista Previa de Guía — {previewModal.row.name || 'Cliente'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Empresa: {previewModal.row.shippingMethod === 'servientrega' ? 'Servientrega' : 'Uno Express'} · Guía: {previewModal.row.guide || 'PENDIENTE'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={previewModal.url}
+                  download={previewModal.filename}
+                  className={`px-4 py-2 rounded-full text-xs font-semibold text-white flex items-center gap-1.5 transition-colors ${selectedBrand === 'casio' ? 'bg-black hover:bg-neutral-800' : 'bg-[#0071E3] hover:bg-[#0077ED]'}`}
+                >
+                  <Download size={14} />
+                  Descargar PDF
+                </a>
+                <button
+                  onClick={closePreviewModal}
+                  className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-black/5 transition-colors"
+                  title="Cerrar"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="bg-slate-100 h-[70vh] w-full">
+              <iframe
+                src={previewModal.url}
+                title="Vista previa del PDF"
+                className="w-full h-full border-0"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

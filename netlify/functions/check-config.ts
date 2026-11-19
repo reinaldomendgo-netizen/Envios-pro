@@ -21,7 +21,8 @@ export const handler: Handler = async (event, context) => {
       statusCode: 500,
       body: JSON.stringify({ 
         status: "error",
-        missing: missingVars
+        missing: missingVars,
+        message: `Faltan variables de entorno: ${missingVars.join(", ")}`
       }),
     };
   }
